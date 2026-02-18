@@ -1,6 +1,7 @@
 const apiKey = "1d445bc9bd8847cfa1542a32abe0f19c";
 
 document.addEventListener("DOMContentLoaded", () => {
+
   const detectBtn = document.getElementById("detectBtn");
   const lookupBtn = document.getElementById("lookupBtn");
   const geoBtn = document.getElementById("geoBtn");
@@ -9,6 +10,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const ipInput = document.getElementById("ipInput");
   const output = document.getElementById("output");
   const highAccuracy = document.getElementById("highAccuracy");
+
+  let lastIPLocation = null;
+  let lastGPSLocation = null;
 
   function setOutput(text) {
     output.textContent = text;
@@ -24,124 +28,186 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function ensureApiKey() {
     if (!apiKey || apiKey === "TU_API_KEY_AQUI") {
-      alert("Configura tu API key en app.js (apiKey) para usar ipgeolocation.");
+      alert("Configura tu API key en app.js");
       return false;
     }
     return true;
   }
 
-  // -------- Validación IP ----------
+  // ===============================
+  // VALIDACIÓN IP
+  // ===============================
   function isValidIPv4(ip) {
     const parts = ip.trim().split(".");
     if (parts.length !== 4) return false;
-    return parts.every((p) => {
+    return parts.every(p => {
       if (!/^\d+$/.test(p)) return false;
       const n = Number(p);
       return n >= 0 && n <= 255;
     });
   }
+
   function isValidIPv6(ip) {
-    const v = ip.trim();
-    if (!v.includes(":")) return false;
-    return /^[0-9a-fA-F:]+$/.test(v);
+    return /^[0-9a-fA-F:]+$/.test(ip.trim()) && ip.includes(":");
   }
+
   function isValidIP(ip) {
     return isValidIPv4(ip) || isValidIPv6(ip);
   }
 
-  // ====== Opción C: Geolocation API (REAL) ======
-  geoBtn.addEventListener("click", async () => {
+  // ===============================
+  // OPCIÓN A - DETECTAR IP
+  // ===============================
+  detectBtn.addEventListener("click", async () => {
+    if (!requireConsent()) return;
+    if (!ensureApiKey()) return;
+
+    setOutput("Obteniendo IP pública vía WebRTC...");
+
+    try {
+      const ip = await getPublicIP();
+      await lookupIP(ip);
+    } catch (err) {
+      setOutput("Error detectando IP: " + err.message);
+    }
+  });
+
+  // ===============================
+  // OPCIÓN B - IP MANUAL
+  // ===============================
+  lookupBtn.addEventListener("click", async () => {
+    if (!requireConsent()) return;
+    if (!ensureApiKey()) return;
+
+    const ip = ipInput.value.trim();
+
+    if (!isValidIP(ip)) {
+      alert("IP inválida.");
+      return;
+    }
+
+    await lookupIP(ip);
+  });
+
+  async function lookupIP(ip) {
+    setOutput("Consultando ubicación aproximada por IP...");
+
+    const geo = await getGeoLocation(ip);
+
+    lastIPLocation = {
+      latitude: parseFloat(geo.latitude),
+      longitude: parseFloat(geo.longitude)
+    };
+
+    renderResults({
+      source: "ip_geolocation",
+      ip: geo.ip,
+      country: geo.country_name,
+      city: geo.city,
+      latitude: geo.latitude,
+      longitude: geo.longitude,
+      isp: geo.isp,
+      organization: geo.organization
+    });
+  }
+
+  async function getGeoLocation(ip) {
+    const url = `https://api.ipgeolocation.io/ipgeo?apiKey=${apiKey}&ip=${ip}`;
+    const res = await fetch(url);
+    return await res.json();
+  }
+
+  // ===============================
+  // OPCIÓN C - GEOLOCATION REAL
+  // ===============================
+  geoBtn.addEventListener("click", () => {
     if (!requireConsent()) return;
 
-    if (!("geolocation" in navigator)) {
+    if (!navigator.geolocation) {
       setOutput("Tu navegador no soporta Geolocation API.");
       return;
     }
 
-    setOutput("Solicitando permiso y obteniendo ubicación real...");
-
-    const options = {
-      enableHighAccuracy: !!highAccuracy.checked,
-      timeout: 12000,
-      maximumAge: 0,
-    };
+    setOutput("Obteniendo ubicación real...");
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
+      async (pos) => {
 
-        const result = {
-          source: "browser_geolocation",
-          latitude,
-          longitude,
-          accuracy_meters: accuracy,
-          timestamp: new Date(pos.timestamp).toISOString(),
-          note: "Ubicación real estimada por GPS/Wi-Fi/celdas (según dispositivo).",
-        };
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy;
 
-        setOutput(JSON.stringify(result, null, 2));
+        lastGPSLocation = { latitude: lat, longitude: lng };
+
+        await reverseGeocode(lat, lng, accuracy);
+
       },
       (err) => {
-        // Mensajes claros según el error
-        let msg = `Error Geolocation: ${err.message}`;
-        if (err.code === 1) msg = "Permiso denegado por el usuario.";
-        if (err.code === 2) msg = "No se pudo determinar la ubicación (señal/servicios apagados).";
-        if (err.code === 3) msg = "Tiempo de espera agotado al obtener ubicación.";
-        setOutput(msg + "\n\nTip: debe ser HTTPS o localhost.");
+        setOutput("Error GPS: " + err.message);
       },
-      options
+      {
+        enableHighAccuracy: highAccuracy.checked,
+        timeout: 15000,
+        maximumAge: 0
+      }
     );
   });
 
-  // ====== Opción A y B: IP Geolocation (APROX) ======
+  // ===============================
+  // REVERSE GEOCODING (OpenStreetMap)
+  // ===============================
+  async function reverseGeocode(lat, lng, accuracy) {
 
-  lookupBtn.addEventListener("click", async () => {
     try {
-      if (!requireConsent()) return;
-      if (!ensureApiKey()) return;
-
-      const ip = ipInput.value.trim();
-      if (!isValidIP(ip)) {
-        alert("Ingresa una IP válida (IPv4 o IPv6). Ej: 8.8.8.8");
-        return;
-      }
-
-      setOutput(`IP ingresada: ${ip}\nConsultando ubicación aproximada por IP...`);
-      await lookupAndRender(ip);
-    } catch (err) {
-      setOutput("Error: " + (err?.message || err));
-    }
-  });
-
-  detectBtn.addEventListener("click", async () => {
-    try {
-      if (!requireConsent()) return;
-      if (!ensureApiKey()) return;
-
-      setOutput("Obteniendo IP pública vía WebRTC...");
-      const ip = await getPublicIP();
-      await lookupAndRender(ip);
-    } catch (err) {
-      setOutput(
-        "Error detectando IP: " +
-          (err?.message || err) +
-          "\nTip: algunos VPN/navegadores bloquean WebRTC."
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
       );
-    }
-  });
 
-  function getPublicIP() {
-    return new Promise((resolve, reject) => {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      const data = await res.json();
+
+      renderResults({
+        source: "browser_geolocation",
+        latitude: lat,
+        longitude: lng,
+        accuracy_meters: accuracy,
+        country: data.address?.country || "",
+        state: data.address?.state || "",
+        city:
+          data.address?.city ||
+          data.address?.town ||
+          data.address?.village ||
+          "",
+        postcode: data.address?.postcode || "",
+        full_address: data.display_name || ""
       });
 
-      pc.createDataChannel("x");
+      if (lastIPLocation && lastGPSLocation) {
+        const distance = calculateDistance(
+          lastIPLocation.latitude,
+          lastIPLocation.longitude,
+          lastGPSLocation.latitude,
+          lastGPSLocation.longitude
+        );
 
-      const timeout = setTimeout(() => {
-        try { pc.close(); } catch {}
-        reject(new Error("Timeout: no se obtuvo candidate srflx."));
-      }, 9000);
+        output.textContent += `\n\nDistancia IP vs GPS: ${distance.toFixed(2)} km`;
+      }
+
+    } catch (error) {
+      setOutput("Error obteniendo detalles de ubicación.");
+    }
+  }
+
+  // ===============================
+  // WEBRTC IP
+  // ===============================
+  function getPublicIP() {
+    return new Promise((resolve, reject) => {
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+
+      pc.createDataChannel("");
 
       pc.onicecandidate = (event) => {
         if (!event.candidate) return;
@@ -150,96 +216,45 @@ document.addEventListener("DOMContentLoaded", () => {
         const ip = parts[4];
         const type = parts[7];
 
-        if (type === "srflx" && ip) {
-          clearTimeout(timeout);
+        if (type === "srflx") {
           resolve(ip);
-          try { pc.close(); } catch {}
+          pc.close();
         }
       };
 
       pc.createOffer()
-        .then((offer) => pc.setLocalDescription(offer))
-        .catch((err) => {
-          clearTimeout(timeout);
-          try { pc.close(); } catch {}
-          reject(err);
-        });
+        .then(offer => pc.setLocalDescription(offer))
+        .catch(err => reject(err));
     });
   }
 
-  async function lookupAndRender(ip) {
-    const geo = await getGeoLocation(ip);
+  // ===============================
+  // CALCULAR DISTANCIA (Haversine)
+  // ===============================
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(deg2rad(lat1)) *
+        Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
 
-    // Tu estructura completa
-    const result = {
-      source: "ip_geolocation",
-      ip: geo.ip || "",
-      continent_code: geo.continent_code || "",
-      continent_name: geo.continent_name || "",
-      country_code2: geo.country_code2 || "",
-      country_code3: geo.country_code3 || "",
-      country_name: geo.country_name || "",
-      country_name_official: geo.country_name_official || "",
-      country_capital: geo.country_capital || "",
-      state_prov: geo.state_prov || "",
-      state_code: geo.state_code || "",
-      district: geo.district || "",
-      city: geo.city || "",
-      zipcode: geo.zipcode || "",
-      latitude: geo.latitude || "",
-      longitude: geo.longitude || "",
-      is_eu: geo.is_eu ?? null,
-      country_flag: geo.country_flag || "",
-      geoname_id: geo.geoname_id || "",
-      country_emoji: geo.country_emoji || "",
-      calling_code: geo.calling_code || "",
-      country_tld: geo.country_tld || "",
-      languages: geo.languages || "",
-      isp: geo.isp || "",
-      connection_type: geo.connection_type || "",
-      organization: geo.organization || "",
-      currency: {
-        code: geo.currency?.code || "",
-        name: geo.currency?.name || "",
-        symbol: geo.currency?.symbol || ""
-      },
-      time_zone: {
-        name: geo.time_zone?.name || "",
-        offset: geo.time_zone?.offset ?? null,
-        offset_with_dst: geo.time_zone?.offset_with_dst ?? null,
-        current_time: geo.time_zone?.current_time || "",
-        current_time_unix: geo.time_zone?.current_time_unix ?? null,
-        current_tz_abbreviation: geo.time_zone?.current_tz_abbreviation || "",
-        current_tz_full_name: geo.time_zone?.current_tz_full_name || "",
-        standard_tz_abbreviation: geo.time_zone?.standard_tz_abbreviation || "",
-        standard_tz_full_name: geo.time_zone?.standard_tz_full_name || "",
-        is_dst: geo.time_zone?.is_dst ?? null,
-        dst_savings: geo.time_zone?.dst_savings ?? null,
-        dst_exists: geo.time_zone?.dst_exists ?? null,
-        dst_tz_abbreviation: geo.time_zone?.dst_tz_abbreviation || "",
-        dst_tz_full_name: geo.time_zone?.dst_tz_full_name || "",
-        dst_start: geo.time_zone?.dst_start || "",
-        dst_end: geo.time_zone?.dst_end || ""
-      }
-    };
-
-    setOutput(JSON.stringify(result, null, 2));
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
   }
 
-  async function getGeoLocation(ip) {
-    const url = `https://api.ipgeolocation.io/ipgeo?apiKey=${encodeURIComponent(
-      apiKey
-    )}&ip=${encodeURIComponent(ip)}`;
-
-    const res = await fetch(url);
-    if (!res.ok) {
-      let detail = "";
-      try {
-        const j = await res.json();
-        if (j?.message) detail = ` - ${j.message}`;
-      } catch {}
-      throw new Error(`API error ${res.status}${detail}`);
-    }
-    return await res.json();
+  function deg2rad(deg) {
+    return deg * (Math.PI / 180);
   }
+
+  // ===============================
+  // RENDER RESULTADOS
+  // ===============================
+  function renderResults(obj) {
+    setOutput(JSON.stringify(obj, null, 2));
+  }
+
 });
