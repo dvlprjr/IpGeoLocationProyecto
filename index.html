@@ -3,26 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>IP + Geolocalización (Demo)</title>
+  <title>IP / Geo (Demo)</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container">
-    <h1>IP + Ubicación aproximada</h1>
+    <h1>IP + Ubicación</h1>
 
     <p class="disclaimer">
-      Puedes detectar tu IP pública con WebRTC o ingresar una IP pública manualmente para consultar su ubicación aproximada.
+      Puedes: (A) detectar IP pública, (B) consultar una IP manual, o (C) obtener tu ubicación real usando la Geolocation API del navegador (requiere permiso).
     </p>
 
     <label class="consent">
       <input type="checkbox" id="consent" />
-      Acepto consultar IP y ubicación aproximada
+      Acepto consultar IP/ubicación (y permitir ubicación del navegador si elijo la opción C)
     </label>
 
     <div class="card">
-      <h2>Opción A: Detectar IP</h2>
+      <h2>Opción A: Detectar IP (WebRTC)</h2>
       <button id="detectBtn">Detectar mi IP pública</button>
-      <p class="hint">Usa WebRTC (STUN) para obtener un candidate tipo <b>srflx</b>.</p>
+      <p class="hint">Aproximado (por IP). Depende de ISP/VPN.</p>
     </div>
 
     <div class="card">
@@ -31,7 +31,23 @@
         <input id="ipInput" type="text" placeholder="Ej: 8.8.8.8" autocomplete="off" />
         <button id="lookupBtn">Consultar</button>
       </div>
-      <p class="hint">Acepta IPv4 o IPv6 públicas.</p>
+      <p class="hint">Aproximado (por IP).</p>
+    </div>
+
+    <div class="card">
+      <h2>Opción C: Ubicación real (Geolocation API)</h2>
+      <button id="geoBtn">Obtener mi ubicación real</button>
+
+      <div class="row" style="margin-top:10px;">
+        <label class="hint" style="margin:0;">
+          Precisión alta:
+          <input type="checkbox" id="highAccuracy" />
+        </label>
+      </div>
+
+      <p class="hint">
+        Requiere permiso del navegador. Funciona en HTTPS o localhost.
+      </p>
     </div>
 
     <pre id="output"></pre>

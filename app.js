@@ -1,10 +1,14 @@
 const apiKey = "1d445bc9bd8847cfa1542a32abe0f19c";
+
 document.addEventListener("DOMContentLoaded", () => {
   const detectBtn = document.getElementById("detectBtn");
   const lookupBtn = document.getElementById("lookupBtn");
+  const geoBtn = document.getElementById("geoBtn");
+
   const consent = document.getElementById("consent");
   const ipInput = document.getElementById("ipInput");
   const output = document.getElementById("output");
+  const highAccuracy = document.getElementById("highAccuracy");
 
   function setOutput(text) {
     output.textContent = text;
@@ -20,12 +24,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function ensureApiKey() {
     if (!apiKey || apiKey === "TU_API_KEY_AQUI") {
-      alert("Configura tu API key en app.js (apiKey).");
+      alert("Configura tu API key en app.js (apiKey) para usar ipgeolocation.");
       return false;
     }
     return true;
   }
 
+  // -------- Validación IP ----------
   function isValidIPv4(ip) {
     const parts = ip.trim().split(".");
     if (parts.length !== 4) return false;
@@ -35,16 +40,60 @@ document.addEventListener("DOMContentLoaded", () => {
       return n >= 0 && n <= 255;
     });
   }
-
   function isValidIPv6(ip) {
     const v = ip.trim();
     if (!v.includes(":")) return false;
     return /^[0-9a-fA-F:]+$/.test(v);
   }
-
   function isValidIP(ip) {
     return isValidIPv4(ip) || isValidIPv6(ip);
   }
+
+  // ====== Opción C: Geolocation API (REAL) ======
+  geoBtn.addEventListener("click", async () => {
+    if (!requireConsent()) return;
+
+    if (!("geolocation" in navigator)) {
+      setOutput("Tu navegador no soporta Geolocation API.");
+      return;
+    }
+
+    setOutput("Solicitando permiso y obteniendo ubicación real...");
+
+    const options = {
+      enableHighAccuracy: !!highAccuracy.checked,
+      timeout: 12000,
+      maximumAge: 0,
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+
+        const result = {
+          source: "browser_geolocation",
+          latitude,
+          longitude,
+          accuracy_meters: accuracy,
+          timestamp: new Date(pos.timestamp).toISOString(),
+          note: "Ubicación real estimada por GPS/Wi-Fi/celdas (según dispositivo).",
+        };
+
+        setOutput(JSON.stringify(result, null, 2));
+      },
+      (err) => {
+        // Mensajes claros según el error
+        let msg = `Error Geolocation: ${err.message}`;
+        if (err.code === 1) msg = "Permiso denegado por el usuario.";
+        if (err.code === 2) msg = "No se pudo determinar la ubicación (señal/servicios apagados).";
+        if (err.code === 3) msg = "Tiempo de espera agotado al obtener ubicación.";
+        setOutput(msg + "\n\nTip: debe ser HTTPS o localhost.");
+      },
+      options
+    );
+  });
+
+  // ====== Opción A y B: IP Geolocation (APROX) ======
 
   lookupBtn.addEventListener("click", async () => {
     try {
@@ -57,7 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      setOutput(`IP ingresada: ${ip}\nConsultando ubicación...`);
+      setOutput(`IP ingresada: ${ip}\nConsultando ubicación aproximada por IP...`);
       await lookupAndRender(ip);
     } catch (err) {
       setOutput("Error: " + (err?.message || err));
@@ -119,11 +168,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function lookupAndRender(ip) {
-    setOutput(`IP: ${ip}\nConsultando ubicación completa...`);
-
     const geo = await getGeoLocation(ip);
 
+    // Tu estructura completa
     const result = {
+      source: "ip_geolocation",
       ip: geo.ip || "",
       continent_code: geo.continent_code || "",
       continent_name: geo.continent_name || "",
@@ -152,7 +201,7 @@ document.addEventListener("DOMContentLoaded", () => {
       currency: {
         code: geo.currency?.code || "",
         name: geo.currency?.name || "",
-        symbol: geo.currency?.symbol || "",
+        symbol: geo.currency?.symbol || ""
       },
       time_zone: {
         name: geo.time_zone?.name || "",
@@ -170,8 +219,8 @@ document.addEventListener("DOMContentLoaded", () => {
         dst_tz_abbreviation: geo.time_zone?.dst_tz_abbreviation || "",
         dst_tz_full_name: geo.time_zone?.dst_tz_full_name || "",
         dst_start: geo.time_zone?.dst_start || "",
-        dst_end: geo.time_zone?.dst_end || "",
-      },
+        dst_end: geo.time_zone?.dst_end || ""
+      }
     };
 
     setOutput(JSON.stringify(result, null, 2));
@@ -182,17 +231,15 @@ document.addEventListener("DOMContentLoaded", () => {
       apiKey
     )}&ip=${encodeURIComponent(ip)}`;
 
-    const response = await fetch(url);
-
-    if (!response.ok) {
+    const res = await fetch(url);
+    if (!res.ok) {
       let detail = "";
       try {
-        const j = await response.json();
+        const j = await res.json();
         if (j?.message) detail = ` - ${j.message}`;
       } catch {}
-      throw new Error(`API error ${response.status}${detail}`);
+      throw new Error(`API error ${res.status}${detail}`);
     }
-
-    return await response.json();
+    return await res.json();
   }
 });
