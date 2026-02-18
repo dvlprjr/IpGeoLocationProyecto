@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>IP + Geolocalización (Demo)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>IP + Ubicación aproximada</h1>
+
+    <p class="disclaimer">
+      Puedes detectar tu IP pública con WebRTC o ingresar una IP pública manualmente para consultar su ubicación aproximada.
+    </p>
+
+    <label class="consent">
+      <input type="checkbox" id="consent" />
+      Acepto consultar IP y ubicación aproximada
+    </label>
+
+    <div class="card">
+      <h2>Opción A: Detectar IP</h2>
+      <button id="detectBtn">Detectar mi IP pública</button>
+      <p class="hint">Usa WebRTC (STUN) para obtener un candidate tipo <b>srflx</b>.</p>
+    </div>
+
+    <div class="card">
+      <h2>Opción B: Ingresar IP pública</h2>
+      <div class="row">
+        <input id="ipInput" type="text" placeholder="Ej: 8.8.8.8" autocomplete="off" />
+        <button id="lookupBtn">Consultar</button>
+      </div>
+      <p class="hint">Acepta IPv4 o IPv6 públicas.</p>
+    </div>
+
+    <pre id="output"></pre>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
