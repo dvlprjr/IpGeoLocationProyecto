@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const lookupBtn = document.getElementById("lookupBtn");
   const geoBtn = document.getElementById("geoBtn");
 
-  const consent = document.getElementById("consent");
+//   const consent = document.getElementById("consent");
   const ipInput = document.getElementById("ipInput");
   const output = document.getElementById("output");
   const highAccuracy = document.getElementById("highAccuracy");
@@ -18,13 +18,13 @@ document.addEventListener("DOMContentLoaded", () => {
     output.textContent = text;
   }
 
-  function requireConsent() {
-    if (!consent.checked) {
-      alert("Debes aceptar el consentimiento primero.");
-      return false;
-    }
-    return true;
-  }
+//   function requireConsent() {
+//     if (!consent.checked) {
+//       alert("Debes aceptar el consentimiento primero.");
+//       return false;
+//     }
+//     return true;
+//   }
 
   function ensureApiKey() {
     if (!apiKey || apiKey === "TU_API_KEY_AQUI") {
@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // OPCIÓN A - DETECTAR IP
   // ===============================
   detectBtn.addEventListener("click", async () => {
-    if (!requireConsent()) return;
+    // if (!requireConsent()) return;
     if (!ensureApiKey()) return;
 
     setOutput("Obteniendo IP pública vía WebRTC...");
@@ -76,7 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // OPCIÓN B - IP MANUAL
   // ===============================
   lookupBtn.addEventListener("click", async () => {
-    if (!requireConsent()) return;
+    // if (!requireConsent()) return;
     if (!ensureApiKey()) return;
 
     const ip = ipInput.value.trim();
@@ -121,7 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // OPCIÓN C - GEOLOCATION REAL
   // ===============================
   geoBtn.addEventListener("click", () => {
-    if (!requireConsent()) return;
+    // if (!requireConsent()) return;
 
     if (!navigator.geolocation) {
       setOutput("Tu navegador no soporta Geolocation API.");
@@ -166,7 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
 
       renderResults({
-        source: "browser_geolocation",
+        //source: "browser_geolocation",
         latitude: lat,
         longitude: lng,
         accuracy_meters: accuracy,
